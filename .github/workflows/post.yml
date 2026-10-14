@@ -1,0 +1,106 @@
+name: neko-stock
+
+# 1日3回（日本時間 8:00 / 12:30 / 20:00 ごろ）に実行して、
+# 「投稿ストック」を少しずつ補充します。
+# GitHubのcronはUTC指定なので、日本時間から9時間引いた時刻を書きます。
+on:
+  schedule:
+    - cron: "0 23 * * *"    # 08:00 JST
+    - cron: "30 3 * * *"    # 12:30 JST
+    - cron: "0 11 * * *"    # 20:00 JST
+  workflow_dispatch:         # 手動実行ボタン（Actionsタブから押せます）
+    inputs:
+      count:
+        description: "今回追加する件数（空欄なら設定ファイルの値）"
+        required: false
+        default: ""
+      mode:
+        description: "manual=ストック補充 / auto=自動投稿"
+        required: false
+        default: "manual"
+
+permissions:
+  contents: write            # 台帳（data/state.sqlite3）をコミットして次回に引き継ぐため
+  pages: write               # GitHub Pages へストックを公開するため
+  id-token: write
+
+concurrency:
+  group: neko-stock
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 依存パッケージのインストール
+        run: pip install -r requirements.txt
+
+      - name: 設定ファイルの準備
+        run: cp config.example.yaml config.yaml
+
+      # ── ストックを補充 ────────────────────────────────────────────
+      # ストックモードなので、X / Instagram / Threads のAPIキーは不要です。
+      # 必要なのは GEMINI_API_KEY と、写真の取り込み元の設定だけ。
+      - name: ストックを補充
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          CLOUDINARY_UPLOAD_PRESET: ${{ secrets.CLOUDINARY_UPLOAD_PRESET }}
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          COUNT="${{ github.event.inputs.count }}"
+          [ -z "$MODE" ] && MODE="manual"
+          export PAGES_URL="https://$(echo '${{ github.repository }}' | cut -d/ -f1).github.io/$(echo '${{ github.repository }}' | cut -d/ -f2)/"
+          echo "公開URL: $PAGES_URL"
+          if [ -n "$COUNT" ]; then
+            python -m src.main --mode "$MODE" --limit "$COUNT"
+          else
+            python -m src.main --mode "$MODE"
+          fi
+
+      - name: 台帳を保存（次回以降も「使用済み」を覚えておくため）
+        if: always()
+        run: |
+          git config user.name "neko-bot"
+          git config user.email "neko-bot@users.noreply.github.com"
+          git add -f data/state.sqlite3 || true
+          git commit -m "chore: update ledger [skip ci]" || echo "変更なし"
+          git push || echo "pushをスキップしました"
+
+      - name: ストックを artifact としても保存（Pagesが使えない場合の保険）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-stock
+          path: docs
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # ── GitHub Pages へ公開 ──────────────────────────────────────
+      # 初回は enablement: true が Pages を自動で有効化します。
+      - name: Pages の準備
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: ストックをアップロード
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: 公開
+        id: deploy
+        uses: actions/deploy-pages@v4
