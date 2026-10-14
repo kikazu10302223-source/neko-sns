@@ -1,0 +1,77 @@
+# ============================================================
+#  ねこSNS投稿パイプライン 設定ファイル
+#
+#  このファイルをコピーして config.yaml を作り、値を埋めてください。
+#  ※ GitHub Actions で使う場合は、GitHub上でこのファイル
+#    （config.example.yaml）を直接編集すればOKです。
+#
+#  パスワード類（APIキー）はここに書かず、
+#  環境変数 / GitHub Secrets に入れてください。
+# ============================================================
+
+# --- 実行モード -------------------------------------------------
+#  manual … 投稿はせず「投稿キュー」（docs/index.html）を作るだけ。
+#           スマホで開いてコピー＆ペーストし、自分で投稿する。
+#           → XのAPIキー・審査・課金がすべて不要（おすすめ）
+#  auto   … X / Instagram / Threads へ自動投稿する（各APIキーが必要）
+mode: "manual"
+
+# --- 手動モードの設定（mode: manual のときだけ使われます）--------
+manual:
+  queue_size: 12            # キューに残しておく件数（スマホのページに並ぶ数）
+  page_title: "投稿キュー"
+  daily_goal: 3             # 1日に消化したい件数の目安（表示用）
+
+# --- 猫とショップの基本情報（AIが文面を作る材料になります）---
+profile:
+  cat_name: "むぎ"                    # 愛猫の名前
+  cat_traits: "キジトラ、甘えん坊、食いしん坊、昼寝が得意"   # 性格・見た目の特徴
+  account_concept: "愛猫の日常と、その写真から生まれたグッズのお店"  # アカウントの方向性
+  shop_name: "むぎ屋"
+  shop_url: "https://suzuri.jp/xxxxx"  # SUZURIのショップURL
+  tone: "親しみやすく、少しユーモア。絵文字は1〜2個まで。売り込み感は弱め"
+  ng_words: ["かわいいだけ", "拡散希望"]   # 使ってほしくない言葉
+
+# --- 投稿先のON/OFF ---
+platforms:
+  x: true
+  instagram: true
+  threads: true
+  # 画像の縦横比（SNSごとに最適な形が違います）
+  instagram_ratio: "4:5"    # 1:1 / 4:5 / 16:9
+  x_ratio: "16:9"
+  threads_ratio: "4:5"
+
+# --- 1回の実行で何枚処理するか / 1日の上限 ---
+posting:
+  per_run: 1                # 1回の実行で処理する枚数
+  max_per_day: 3            # 1日の最大件数（連投によるスパム判定を避ける）
+  jitter_minutes: 20        # 実行時刻をランダムにずらす幅（分）※autoモードのみ
+  link_in_reply: true       # Xでは本文にURLを入れず、リプライに逃がす
+
+# --- 写真の置き場 ---
+source:
+  type: "cloudinary"        # cloudinary（スマホから入れられて楽） / local（PC内フォルダ）
+  local_dir: ""             # type: local のときのフォルダパス
+  cloudinary_folder: "neko" # Cloudinary上のフォルダ名（prefix）
+
+# --- 画像の加工 ---
+image:
+  add_watermark: true
+  watermark_text: "@mugi_shop"
+  watermark_opacity: 110     # 0-255
+  autocontrast: true         # 明るさ・コントラストを自動補正
+  max_side: 1440             # 長辺をこのピクセル数に縮小
+  jpeg_quality: 88
+
+# --- 重複判定 ---
+dedupe:
+  dhash_distance: 6          # 0に近いほど厳しい。6前後が「同じ写真」を拾いやすい
+  lookback_days: 365         # 過去何日分と比較するか
+
+# --- AI（文面生成）---
+ai:
+  provider: "gemini"
+  model: "gemini-2.5-flash"  # 使えるモデル名は `python -m src.list_models` で確認
+  fallback_models: ["gemini-2.0-flash", "gemini-2.5-flash-lite"]
+  temperature: 1.0
