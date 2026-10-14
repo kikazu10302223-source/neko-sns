@@ -1,0 +1,18 @@
+# 秘密情報は絶対にコミットしない
+config.yaml
+.env
+
+# 写真そのもの（リポジトリを太らせない）
+inbox/*
+!inbox/.gitkeep
+data/work/
+data/outbox/
+
+# 投稿ストック（GitHub Pages で配信するので、リポジトリには入れない）
+docs/img/
+docs/index.html
+docs/queue.json
+
+__pycache__/
+*.pyc
+.venv/
